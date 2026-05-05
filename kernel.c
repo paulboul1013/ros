@@ -33,18 +33,15 @@ void putchar(char ch){
     sbi_call(ch,0,0,0,0,0,0,1);// console putchar
 }
 
-void *memset(void *buf,char c,size_t n){
-    uint8_t *p=(uint8_t*) buf;
-    while (n--){
-        *p++=c;
-    }
-    return buf;
-}
+
 
 void kernel_main(void){
 
     printf("\n\nHello %s\n","World");
     printf("1 + 2 = %d, %x\n",1+2,0x1234abcd);
+    if (strcmp("hello","hello")==0){
+        printf("hello == hello\n");
+    }
 
     for(;;){
         __asm__ __volatile__("wfi");
