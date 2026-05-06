@@ -1,22 +1,6 @@
 #include "common.h"
 #include "kernel.h"
 
-# define PAGE_SIZE 4096
-
-extern char __free_ram[], __free_ram_end[];
-
-paddr_t alloc_pages(uint32_t n){
-    static paddr_t next_paddr=(paddr_t)__free_ram;
-    paddr_t paddr=next_paddr;
-    next_paddr+=n*PAGE_SIZE;
-
-    if (next_paddr > (paddr_t)__free_ram_end){
-        PANIC("out of memory");
-    }
-
-    memset((void*)paddr,0,n*PAGE_SIZE);
-    return paddr;
-}
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -167,9 +151,13 @@ void yield(void){
     }
 
     __asm__ __volatile__(
+        "sfence.vma\n"
+        "csrw satp, %[satp]\n"
+        "sfence.vma\n"
         "csrw sscratch, %[sscratch]\n"
         :
-        : [sscratch] "r" ((uint32_t)&next->stack[sizeof(next->stack)])
+        : [satp] "r" (SATP_SV32 | ((uint32_t)next->page_table/PAGE_SIZE)),
+          [sscratch] "r" ((uint32_t)&next->stack[sizeof(next->stack)])
     );
 
     //context switch

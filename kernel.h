@@ -5,17 +5,87 @@
 #define PROC_UNUSED  0 //unused process control structure
 #define PROC_RUNNABLE 1 //runable process
 
+#define SATP_SV32 (1u<<31) //enable Sv32 page mode
+#define PAGE_V (1<<0) //valid bit (entry is enabled)
+#define PAGE_R (1<<1) //readable
+#define PAGE_W (1<<2) //writeable
+#define PAGE_X (1<<3) //executeable
+#define PAGE_U (1<<4) //user (accessible in user mode)
+# define PAGE_SIZE 4096
+
+
 #define PANIC(fmt,...) \
     do { \
         printf("PANIC: %s:%d: " fmt "\n" ,__FILE__,__LINE__, ##__VA_ARGS__); \
         while(1){} \
     } while(0)
 
+extern char __free_ram[], __free_ram_end[];
+
+paddr_t alloc_pages(uint32_t n){
+    static paddr_t next_paddr=(paddr_t)__free_ram;
+    paddr_t paddr=next_paddr;
+    next_paddr+=n*PAGE_SIZE;
+
+    if (next_paddr > (paddr_t)__free_ram_end){
+        PANIC("out of memory");
+    }
+
+    memset((void*)paddr,0,n*PAGE_SIZE);
+    return paddr;
+}
+
+void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags){
+    if (!is_aligned(vaddr,PAGE_SIZE)) {
+        PANIC("unaligned vaddr %x",vaddr);
+    }
+
+    if (!is_aligned(paddr,PAGE_SIZE)){
+        PANIC("unaligned paddr %x",paddr);
+    }
+
+    uint32_t vpn1=(vaddr>>22) & 0x3ff;
+    if ((table1[vpn1] & PAGE_V)==0) {
+        //create the 2nd level page table if it doesn't exist
+        uint32_t pt_paddr=alloc_pages(1);
+        table1[vpn1]=((pt_paddr/PAGE_SIZE)<<10) | PAGE_V;
+        //pt_paddr/PAGE_SIZE is phyiscal address convert into the physical page number
+        // pt_paddr = 0x80203000
+        // PAGE_SIZE = 0x1000
+        // pt_paddr / PAGE_SIZE = 0x80203
+        /*
+            31                         10 9          0
+            +----------------------------+------------+
+            |            PPN             |   flags    |
+            +----------------------------+------------+
+        */
+    }
+
+    //set the 2nd level page table entry to map the physical page
+    uint32_t vpn0=(vaddr>>12) & 0x3ff;
+    /*
+        31                22 21                12 11          0
+        +-------------------+-------------------+-------------+
+        |       vpn1        |       vpn0        | page offset |
+        +-------------------+-------------------+-------------+
+    */
+
+    //get the PPN from first level entry: table1[vpn1]>>10
+    // convert into physical address: (table1[vpn1]>>10)*PAGE_SIZE
+    uint32_t *table0=(uint32_t*) ((table1[vpn1]>>10)*PAGE_SIZE);
+
+    //setting 2nd entry,complete mapping
+    //put the PPN of physical page into the 2nd level page table entry
+    //and add flags
+    table0[vpn0]=((paddr/PAGE_SIZE)<<10) | flags | PAGE_V;
+
+}
 
 struct process {
     int pid; //process ID
     int state; //process state: PROC_UNUSED or PROC_RUNNABLE
     vaddr_t sp; //stack pointer
+    uint32_t *page_table;
     uint8_t stack[8192]; //kernel stack
 };
 
@@ -64,6 +134,8 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp,
 
 struct process procs[PROCS_MAX]; //all process control structure
 
+extern char __kernel_base[];
+
 struct process *create_process(uint32_t pc){
     //find an unused process control structure
     struct process *proc=NULL;
@@ -96,10 +168,18 @@ struct process *create_process(uint32_t pc){
     *--sp=0; //s0
     *--sp=(uint32_t)pc; //ra
 
+    //map kernel pages;
+    uint32_t *page_table=(uint32_t*)alloc_pages(1);
+    for(paddr_t paddr = (paddr_t)__kernel_base;
+        paddr<(paddr_t)__free_ram_end; paddr+=PAGE_SIZE){
+            map_page(page_table,paddr,paddr,PAGE_R | PAGE_W | PAGE_X);
+        }
+
     //init
     proc->pid=i+1;
     proc->state=PROC_RUNNABLE;
     proc->sp=(uint32_t)sp;
+    proc->page_table=page_table;
     return proc;
 
 }
