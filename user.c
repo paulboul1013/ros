@@ -7,7 +7,7 @@ __attribute__((noreturn)) void exit(void) {
 }
 
 void putchar(char ch){
-    //todo
+    syscall(SYS_PUTCHAR,ch,0,0);
 }
 
 __attribute__((section(".text.start")))
