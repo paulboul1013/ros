@@ -20,6 +20,7 @@
 #define SSTATUS_SPIE (1<<5) //into user-mode allow hw interrupt
 
 #define SCAUSE_ECALL 8 //syscall
+#define PROC_EXITED 2
 
 #define PANIC(fmt,...) \
     do { \
