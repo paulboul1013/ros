@@ -15,5 +15,30 @@ int syscall(int sysno, int arg0,int arg1,int arg2){
 }
 
 void main(void) {
-    printf("Hello World from shell!\n");
+    while(1){
+prompt:
+        printf("> ");
+        char cmdline[128];
+        for(int i=0;;i++) {
+            char ch=getchar();
+            putchar(ch);
+            if (i==sizeof(cmdline)-1){ 
+                printf("command line too long\n");
+                goto prompt;
+            }
+            else if (ch=='\r') { //newline character is \r in the debug qemu terminal
+                printf("\n");
+                cmdline[i]=0;
+                break;
+            }else{
+                cmdline[i]=ch;
+            }
+        }            
+
+        if (strcmp(cmdline,"hello")==0){
+            printf("Hello world from shell!\n");
+        }else{
+            printf("Unkown command: %s\n",cmdline);
+        }
+    }
 }
