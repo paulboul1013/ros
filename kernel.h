@@ -17,6 +17,8 @@
 //needs to match the starting address defined in user.ld
 #define USER_BASE 0x1000000
 
+#define SSTATUS_SPIE (1<<5) //into user-mode allow hw interrupt
+
 #define PANIC(fmt,...) \
     do { \
         printf("PANIC: %s:%d: " fmt "\n" ,__FILE__,__LINE__, ##__VA_ARGS__); \
