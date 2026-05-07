@@ -1,6 +1,72 @@
 #include "common.h"
 #include "kernel.h"
 
+extern char _binary_shell_bin_start[], _binary_shell_bin_size[];
+
+void user_entry(void){
+    PANIC("not yet implemented");
+}
+
+struct process *create_process(const void *image, size_t image_size){
+    //find an unused process control structure
+    struct process *proc=NULL;
+    int i;
+    for(i=0; i< PROCS_MAX ;i++){
+        if (procs[i].state==PROC_UNUSED){
+            proc =&procs[i];
+            break;
+        }
+    }
+
+    if (!proc){
+        PANIC("no free process slots");
+    }
+
+    //stack callee-saved registers
+    //There registers values will be restored in the first context switch in swithc_context
+    uint32_t *sp=(uint32_t*)&proc->stack[sizeof(proc->stack)];
+    *--sp=0; //s11
+    *--sp=0; //s10
+    *--sp=0; //s9
+    *--sp=0; //s8
+    *--sp=0; //s7
+    *--sp=0; //s6
+    *--sp=0; //s5
+    *--sp=0; //s4
+    *--sp=0; //s3
+    *--sp=0; //s2
+    *--sp=0; //s1
+    *--sp=0; //s0
+    *--sp=(uint32_t)user_entry; //ra (changed)
+
+    //map kernel pages;
+    uint32_t *page_table=(uint32_t*)alloc_pages(1);
+    for(paddr_t paddr = (paddr_t)__kernel_base;
+        paddr<(paddr_t)__free_ram_end; paddr+=PAGE_SIZE){
+            map_page(page_table,paddr,paddr,PAGE_R | PAGE_W | PAGE_X);
+        }
+
+    //map user pages
+    for (uint32_t off=0; off< image_size; off+=PAGE_SIZE){
+        paddr_t page=alloc_pages(1);
+
+        //handle the case where the data to be copied is smaller than the page size
+        size_t remaining=image_size-off;
+        size_t copy_size=PAGE_SIZE <= remaining ? PAGE_SIZE : remaining;
+
+        //fill and map the page
+        memcpy((void*)page,image+off,copy_size);
+        map_page(page_table,USER_BASE+off,page, PAGE_U | PAGE_R | PAGE_W | PAGE_X);
+    }
+
+    proc->pid = i + 1;
+    proc->state = PROC_RUNNABLE;
+    proc->sp = (uint32_t) sp;
+    proc->page_table = page_table;
+    return proc;
+
+}
+
 
 __attribute__((naked))
 __attribute__((aligned(4)))
@@ -197,15 +263,15 @@ void kernel_main(void){
 
     WRITE_CSR(stvec,(uint32_t)kernel_entry);
 
-    // idle_proc=create_process((uint32_t)NULL);
-    // idle_proc->pid=0; //idle
-    // current_proc=idle_proc;
+    idle_proc = create_process(NULL,0);
+    idle_proc->pid=0;
+    current_proc=idle_proc;
 
-    // proc_a=create_process((uint32_t)proc_a_entry);
-    // proc_b=create_process((uint32_t)proc_b_entry);
-    
-    // yield();
-    // PANIC("switched to idle process");
+    //new
+    create_process(_binary_shell_bin_start,(size_t)_binary_shell_bin_size);
+
+    yield();
+    PANIC("switch to idle process");
 }
 
 __attribute__((section(".text.boot")))
