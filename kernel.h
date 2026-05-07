@@ -13,6 +13,9 @@
 #define PAGE_U (1<<4) //user (accessible in user mode)
 # define PAGE_SIZE 4096
 
+//base virtual address of an application image
+//needs to match the starting address defined in user.ld
+#define USER_BASE 0x1000000
 
 #define PANIC(fmt,...) \
     do { \
@@ -136,53 +139,6 @@ struct process procs[PROCS_MAX]; //all process control structure
 
 extern char __kernel_base[];
 
-struct process *create_process(uint32_t pc){
-    //find an unused process control structure
-    struct process *proc=NULL;
-    int i;
-    for(i=0; i< PROCS_MAX ;i++){
-        if (procs[i].state==PROC_UNUSED){
-            proc =&procs[i];
-            break;
-        }
-    }
-
-    if (!proc){
-        PANIC("no free process slots");
-    }
-
-    //stack callee-saved registers
-    //There registers values will be restored in the first context switch in swithc_context
-    uint32_t *sp=(uint32_t*)&proc->stack[sizeof(proc->stack)];
-    *--sp=0; //s11
-    *--sp=0; //s10
-    *--sp=0; //s9
-    *--sp=0; //s8
-    *--sp=0; //s7
-    *--sp=0; //s6
-    *--sp=0; //s5
-    *--sp=0; //s4
-    *--sp=0; //s3
-    *--sp=0; //s2
-    *--sp=0; //s1
-    *--sp=0; //s0
-    *--sp=(uint32_t)pc; //ra
-
-    //map kernel pages;
-    uint32_t *page_table=(uint32_t*)alloc_pages(1);
-    for(paddr_t paddr = (paddr_t)__kernel_base;
-        paddr<(paddr_t)__free_ram_end; paddr+=PAGE_SIZE){
-            map_page(page_table,paddr,paddr,PAGE_R | PAGE_W | PAGE_X);
-        }
-
-    //init
-    proc->pid=i+1;
-    proc->state=PROC_RUNNABLE;
-    proc->sp=(uint32_t)sp;
-    proc->page_table=page_table;
-    return proc;
-
-}
 
 
 struct sbiret {
