@@ -24,7 +24,7 @@ SECTIONS {
         *(.bss .bss.* .sbss .sbss.*);
 
         . = ALIGN(16);
-        .+= 64 * 1024; /*64KB*/
+        . += 64 * 1024; /*64KB*/
         __stack_top = .;
 
         ASSERT(. < 0x1800000, "too larget executable");
